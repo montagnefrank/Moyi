@@ -1,0 +1,546 @@
+<?php 
+
+require_once('fpdf/fpdf.php');
+require_once('fpdf/FPDI-1.6.1/fpdi.php');  //estos include son para poder unir varios pdf
+require('print_ups_all.php');
+require_once('barcode.inc.php');
+require_once('barcode39UPS.php');
+
+include ("conectarSQL.php");
+include ("conexion.php");
+include ("seguridad.php");
+include ("calculosUPS.php");
+
+$sql    =  $_SESSION["sql"];
+$user   =  $_SESSION["login"];
+$rol    =  $_SESSION["rol"];
+$pais   =  $_SESSION["pais"];
+$ip     =  $_SERVER['REMOTE_ADDR'];
+
+if(isset($_GET['tracking'])){
+//$sql="select * FROM tblorden
+//      INNER JOIN tblshipto ON tblorden.id_orden = tblshipto.id_shipto 
+//      INNER JOIN tblsoldto ON tblorden.id_orden = tblsoldto.id_soldto 
+//      INNER JOIN tbldirector ON tblorden.id_orden = tbldirector.id_director 
+//      INNER JOIN tbldetalle_orden ON tbldetalle_orden.id_detalleorden = tblorden.id_orden 
+//      INNER JOIN tblproductos ON tblproductos.id_item = tbldetalle_orden.cpitem"
+      
+ $sql="SELECT
+    tblorden.id_orden,
+    tblorden.nombre_compania,
+    tblorden.cpmensaje,
+    tblorden.order_date,
+    tblshipto.shipto1,
+    tblshipto.direccion,
+    tblshipto.cpestado_shipto,
+    tblshipto.cpcuidad_shipto,
+    tblshipto.cptelefono_shipto,
+    tblshipto.cpzip_shipto,
+    tblshipto.shipcountry,
+    tblsoldto.soldto1,
+    tblsoldto.address1,
+    tblsoldto.postalcode,
+    tbldetalle_orden.id_orden_detalle,
+    tbldetalle_orden.Custnumber,
+    tbldetalle_orden.Ponumber,
+    tbldetalle_orden.cpitem,
+    tbldetalle_orden.farm,
+    tbldetalle_orden.cppais_envio,
+    tbldetalle_orden.cporigen,
+    tbldetalle_orden.delivery_traking,
+    tbldetalle_orden.ShipDT_traking,
+    tbldetalle_orden.tracking,
+    tbldetalle_orden.user_bloqueo,
+    tbldetalle_orden.guiamaster,
+    tblproductos.wheigthKg,
+    tblproductos.cpservicio,
+    tblproductos.gen_desc,
+    tblproductos.item,
+    tblproductos.length,
+    tblproductos.width,
+    tblproductos.heigth
+    FROM
+    tblorden
+    INNER JOIN tblshipto ON tblorden.id_orden = tblshipto.id_shipto
+    INNER JOIN tblsoldto ON tblorden.id_orden = tblsoldto.id_soldto
+    INNER JOIN tbldetalle_orden ON tbldetalle_orden.id_detalleorden = tblorden.id_orden
+    INNER JOIN tblproductos ON tblproductos.id_item = tbldetalle_orden.cpitem
+    WHERE tracking='".$_GET['tracking']."'";
+ 
+}
+else if(isset ($_GET['guia'])){
+    //            SELECT *
+//            FROM
+//            tblorden
+//            INNER JOIN tblshipto ON tblorden.id_orden = tblshipto.id_shipto
+//            INNER JOIN tblsoldto ON tblorden.id_orden = tblsoldto.id_soldto
+//            INNER JOIN tbldirector ON tblorden.id_orden = tbldirector.id_director
+//            INNER JOIN tbldetalle_orden ON tbldetalle_orden.id_detalleorden = tblorden.id_orden
+//            INNER JOIN tblproductos ON tblproductos.id_item = tbldetalle_orden.cpitem
+//            INNER JOIN tblguiamaster ON tbldetalle_orden.guiamaster = tblguiamaster.id
+    $sql="SELECT
+            tblorden.id_orden,
+            tblorden.nombre_compania,
+            tblorden.cpmensaje,
+            tblorden.order_date,
+            tblshipto.shipto1,
+            tblshipto.direccion,
+            tblshipto.cpcuidad_shipto,
+            tblshipto.cpestado_shipto,
+            tblshipto.cptelefono_shipto,
+            tblshipto.cpzip_shipto,
+            tblshipto.shipcountry,
+            tblsoldto.soldto1,
+            tblsoldto.address1,
+            tblsoldto.postalcode,
+            tbldetalle_orden.id_orden_detalle,
+            tbldetalle_orden.Custnumber,
+            tbldetalle_orden.Ponumber,
+            tbldetalle_orden.cpitem,
+            tbldetalle_orden.farm,
+            tbldetalle_orden.cppais_envio,
+            tbldetalle_orden.cporigen,
+            tbldetalle_orden.delivery_traking,
+            tbldetalle_orden.ShipDT_traking,
+            tbldetalle_orden.tracking,
+            tbldetalle_orden.user_bloqueo,
+            tbldetalle_orden.guiamaster,
+            tblproductos.wheigthKg,
+            tblproductos.cpservicio,
+            tblproductos.gen_desc,
+            tblproductos.item,
+            tblproductos.length,
+            tblproductos.width,
+            tblproductos.heigth
+            FROM
+            tblorden
+            INNER JOIN tblshipto ON tblorden.id_orden = tblshipto.id_shipto
+            INNER JOIN tblsoldto ON tblorden.id_orden = tblsoldto.id_soldto
+            INNER JOIN tbldetalle_orden ON tbldetalle_orden.id_detalleorden = tblorden.id_orden
+            INNER JOIN tblproductos ON tblproductos.id_item = tbldetalle_orden.cpitem
+            INNER JOIN tblguiamaster ON tbldetalle_orden.guiamaster = tblguiamaster.id 
+            WHERE tblguiamaster.guia='".$_GET['guia']."' LIMIT ".$_GET['limite1'].",".$_GET['limite2'];
+} 
+   
+$directorio = opendir('URC'); //ruta actual
+
+while ($archivo = readdir($directorio)) //obtenemos un archivo y luego otro sucesivamente
+{
+    if (!is_dir($archivo))	//verificamos si es o no un directorio
+    {
+        $archivoNombre = $archivo; 
+        $archivo = "URC"."\\".$archivo;
+        //Leer la primera linea para obtener la version del archivo URC
+        $file = fopen($archivo, "r") or exit("Unable to open file!");
+        //Output a line of the file until the end is reached
+        $line = fgets($file);
+        $linepos = strpos($line,'URC')+3;
+        $line = substr($line, $linepos);
+        $line = str_replace(',','',$line);
+
+        //Version del URC
+        $urc = str_replace('"',' ',$line);
+
+        /*while(!feof($file))
+        {
+                echo fgets($file). "<br />";
+        }*/
+        fclose($file);
+    }
+}
+
+function recibe_imagen ($url_origen,$archivo_destino){ 
+        $mi_curl = curl_init ($url_origen); 
+        $fs_archivo = fopen ($archivo_destino, "w"); 
+        curl_setopt ($mi_curl, CURLOPT_FILE, $fs_archivo); 
+        curl_setopt ($mi_curl, CURLOPT_HEADER, 0); 
+        curl_exec ($mi_curl); 
+        curl_close ($mi_curl); 
+        fclose ($fs_archivo); 
+}
+
+
+
+$link = conectar(DB_HOST, DB_USER, DB_PASSWORD, DB_DATABASE)or die('No pudo conectarse : '. mysql_error());
+$query=mysql_query($sql,$link);
+
+//Obtengo los datos del cliente UPS
+$sql2   = "SELECT * FROM tblclienteups";
+$query2 = mysql_query($sql2,$link);
+$row2 = mysql_fetch_array($query2);
+
+//Creacion del objeto pdf		
+$pdf = new FPDF('P','mm',array(90,140));
+$val=0;
+while($row = mysql_fetch_array($query)){
+
+                //por cada codigo distinto imprimo una pagina
+                $pdf->Ln(0);
+                $pdf->SetTopMargin(3);
+                $pdf->SetLeftMargin(0);
+
+                $pdf->AddPage();
+                $pdf->SetFont('Arial','',8);
+
+                #Establecemos los mÃ¡rgenes izquierda, arriba y derecha: 
+                //$pdf->SetMargins(0,0,0); 
+                $pdf->SetAutoPageBreak(false,0);
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(0);
+                $pdf->Cell(0,0,strtoupper($row2['nombre']),0,0,'L');
+
+                $pdf->SetLeftMargin(52);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','B',12);
+                $pdf->Cell(0,0,$row['wheigthKg']." KG",0,0,'L');
+
+                $pdf->SetLeftMargin(73);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','B',10);
+                
+                //para ver el numero del paquete necesito buscar en las ordenes cuantos paquetes existen con el mismo Ponumber.
+                $sql4   = "SELECT Ponumber,id_orden_detalle FROM tbldetalle_orden WHERE Ponumber='".$row['Ponumber']."' and id_orden_detalle < '".$row['id_orden_detalle']."'";
+                $query4 = mysql_query($sql4,$link);
+                $row4 = mysql_num_rows($query4);
+                $indice=(int)$row4+1;
+                
+                $sql5   = "SELECT count(Ponumber) FROM tbldetalle_orden WHERE Ponumber='".$row['Ponumber']."' GROUP BY Ponumber";
+                $query5 = mysql_query($sql5,$link);
+                $row5 = mysql_fetch_row($query5);
+                
+                $numpaq=$indice."/".$row5[0];
+                
+                $pdf->Cell(0,0,$indice." OF ".$row5[0],0,0,'L');
+
+                $pdf->SetFont('Arial','',8);
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(2.5);
+                $pdf->Cell(0,0,strtoupper($row2['telefono']),0,0,'L');
+                $pdf->Ln(2.5);
+                $pdf->Cell(0,0,strtoupper ($row2['compaÃ±ia']),0,0,'L');
+
+                $pdf->SetLeftMargin(55);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','',8);
+                $pdf->Cell(0,0,'SHP#: '.shp($row['tracking']),0,0,'L');
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(2.5);
+
+                $pdf->Cell(0,0,strtoupper($row2['direccion_extendida']),0,0,'L');
+
+                $pdf->SetLeftMargin(55);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','',8);
+                $pdf->Cell(0,0,'SHP WT: '.$row['wheigthKg'].' KG',0,0,'L');
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(2.5);
+
+                $pdf->Cell(0,0,strtoupper($row2['direccion']),0,0,'L');
+                $pdf->SetLeftMargin(55);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','',8);
+
+                //calculo de DWT largo*ancho*alto/6000 o 9000 dependiendo de UPS. Tomamos 6000
+                $DWT=ceil(($row['length']*$row['width']*$row['heigth'])/6000);
+                $pdf->Cell(0,0,'SHP DWT: '.$DWT.' KG',0,0,'L');
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(2.5);
+
+                $pdf->Cell(0,0,strtoupper($row2['codigo_postal']),0,0,'L');
+                $pdf->SetLeftMargin(55);
+                $pdf->Ln(0);
+                $pdf->SetFont('Arial','',8);
+
+                //obtener la fecha de vuelo
+                $sql3   = "SELECT DAY(fecha_vuelo) AS dia,MONTH(fecha_vuelo) as mes, YEAR(fecha_vuelo) as aÃ±o  FROM tblcoldroom where tracking_asig='".$row['tracking']."'";
+                $query3 = mysql_query($sql3,$link);
+                $row3 = mysql_fetch_array($query3);
+                $meses=array(1=>'JAN',2=>'FEB',3=>'MAR',4=>'APR',5=>'MAY',6=>'JUN',7=>'JUL',8=>'AUG',9=>'SEP',10=>'OCT',11=>'NOV',12=>'DEC');
+
+                $pdf->Cell(0,0,'DATE: '.$row3['dia']." ".$meses[$row3['mes']]." ".$row3['aÃ±o'],0,0,'L');
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(2.5);
+                $pdf->Cell(0,0,strtoupper($row2['pais']),0,0,'L');
+                $pdf->Ln(2.5);
+
+                // Linea horizontal del Maxicode
+                $pdf->Line(0,47,90,47);
+                $pdf->Line(0,47.1,90,47.1);
+                $pdf->Line(0,47.2,90,47.2);
+                $pdf->Line(0,47.3,90,47.3);
+
+                // Linea vertical del Maxicode
+                $pdf->Line(27.1,47.1,27.1,72.6);
+                $pdf->Line(27.2,47.1,27.2,72.6);
+                $pdf->Line(27.3,47.1,27.3,72.6);
+                
+                //////////////////////////////////////////////////////////////
+                //para formar los datos del maxicode.
+                $codpostal=substr(str_replace(" ","%20",$row['cpzip_shipto']), 0,9);
+                $arr=array("US"=>840,"CA"=>124);
+                $codpais=$arr[$row['shipcountry']];
+                
+                $arr2=array("ES"=>"066","SV"=>"004");
+                $claseserv=$arr2[$row['cpservicio']];
+                $tracking="1Z".substr($row['tracking'],10,8);
+                $UPSCODE="UPSN";
+                $upscuenta=  substr($row['tracking'],2,6);
+                $julianday=  substr(gregoriantojd(substr($row['delivery_traking'],5,2), substr($row['delivery_traking'],8,2), substr($row['delivery_traking'],0,4)),0,3);
+                       
+                $pesopaq=$row['wheigthKg'];
+                
+                //ciudad debe estar en  mayuscula y hasta 20 caracteres, en los espacios se debe poner %20, sino no sale en la web
+                $cuidad= substr(strtoupper(str_replace (" ","%20",$row['cpcuidad_shipto'])), 0,20);
+                //estado debe estar en  mayuscula y dos caracteres
+                $estado=strtoupper(substr($row['cpestado_shipto'],0,2));
+                
+                $modo='Mode2';
+                if($row['shipcountry']=='CA')
+                {
+                   $modo="Mode3";
+                }
+                else if($row['shipcountry']=='US')
+                {
+                   $modo="Mode2"; 
+                }
+               
+                recibe_imagen("http://www.bcgen.com/demo/IDAutomationMaxicodeImage.aspx?&D=[)>~03001~02996".$codpostal."~029".$codpais."~029".$claseserv."~029".$tracking."~029UPSN~029"."$upscuenta"."~029".$julianday."~029~029".$numpaq."~029".$pesopaq."~029N~029~029".$cuidad."~029".$estado."~030~004&M=".$modo."&PT=T&O=0","etiqueta".$val.".gif");
+                
+                //para recortar la foto
+                $ini_filename = "etiqueta".$val.".gif";
+                $im = imagecreatefromgif($ini_filename );
+                $ini_x_size = getimagesize($ini_filename )[0];
+                $ini_y_size = getimagesize($ini_filename )[1]-25;
+                //the minimum of xlength and ylength to crop.
+                $crop_measure = min($ini_x_size, $ini_y_size);
+                $to_crop_array = array('x' =>35 , 'y' => 0, 'width' => $crop_measure, 'height'=> $crop_measure);
+                $thumb_im = imagecrop($im, $to_crop_array);
+
+                imagejpeg($thumb_im, "foto".$val.".jpg", 100);
+
+                //iNSERTO IMAGEN Maxicode
+                $pdf->Image("foto".$val.".jpg",$pdf->GetX(),48,28,25);
+
+                //ELIMINO LAS IMAGENES CUANDO TERMINO DE UTILIZARLAS
+                unlink("etiqueta".$val.".gif");
+                unlink("foto".$val.".jpg");
+                $val++;
+                               
+                
+                //$pdf->Image('http://barcode.tec-it.com/barcode.ashx?translate-esc=off&data=Este+es+mi+Maxi+Code&code=MaxiCode&unit=Fit&dpi=256&imagetype=Jpg&rotation=0&color=000000&bgcolor=FFFFFF&qunit=Mm&quiet=0',5,0,80);
+
+                //$pdf->Cell(0,27,''.utf8_decode($_GET['finca']).'',0,0,'C');
+
+                $pdf->SetFont('Arial','B',10);
+                $pdf->Ln(2);	
+                $pdf->SetLeftMargin(0);
+                $pdf->Cell(0,0,'SHIP TO:',0,'L');
+                $pdf->Ln(3.5);
+                $pdf->SetLeftMargin(5);
+                $pdf->SetFont('Arial','',10);
+                $pdf->Cell(0,0,strtoupper($row['shipto1']),0,'L');
+                $pdf->Ln(3.5);
+
+                $pdf->SetFont('Arial','',10);
+                $pdf->Ln(0);
+                $pdf->Cell(0,0,$row['cptelefono_shipto'],0,'L');
+                $pdf->Ln(3.5);
+                if($row['shipto2']!=''){
+                        $pdf->Cell(0,0,strtoupper($row['shipto1'])." / ".strtoupper($row['shipto2']),0,'L');
+                }
+                else{
+                        $pdf->Cell(0,0,strtoupper($row['shipto1']));
+                }
+                $pdf->Ln(3.5);
+                $pdf->Cell(0,0,strtoupper($row['direccion']),0,'L');
+                $pdf->Ln(3.5);
+                $pdf->SetFont('Arial','B',12);
+                $pdf->Cell(0,0,strtoupper($row['cpcuidad_shipto'])." ".strtoupper($row['cpestado_shipto'])." ".strtoupper($row['cpzip_shipto']),0,'L');
+                $pdf->Ln(4.3);
+                //$pdf->Cell(0,0,'POSTAL CODE LINE',0,'L');
+
+                $sqlpais = "SELECT * FROM tblpaises_destino WHERE codpais = '".$row['cppais_envio']."'";
+                $querypais = mysql_query($sqlpais);
+                $rowpais = mysql_fetch_array($querypais);
+
+                $pdf->Cell(0,0,$rowpais['pais_dest'],0,'L');
+
+                // Salto de lÃ­nea
+                $pdf->SetLeftMargin(30);
+                $pdf->Ln(8);
+                $pdf->SetFont('Arial','',20);
+
+                //para construir el URc llamo a la funcion urc y le paso el pais y el codigo postal.
+                $urc=urc($row['cppais_envio'],$row['cpzip_shipto']);
+                //$urc='CAN 516 5-00';
+                $pdf->Cell(0,0,$urc,0,0,'C');
+
+
+                $pdf->Ln(-1);
+                $pdf->SetFont('Arial','B',8);
+
+                //Codigo de barras del URC
+                //esta formado por :
+                //421--codigo para envios internacionales. es fijo
+                //124 o 840--codigo de los paises canada y eu respectivamente
+                //codigo postal del destino
+                if ($row['cppais_envio'] == 'US') {
+                    $cod = 840;
+                } else if ($row['cppais_envio'] == 'CA') {
+                    $cod = 124;
+                }
+                $codebar = '421'.$cod.$row['cpzip_shipto'];
+                Barcode39 ($codebar);
+                $pdf->Image('./barscode/Barcode_'.$codebar.'.png',30 ,58, 0 , 15);
+
+                //Linea gruesa separadora inferior de Maxicode 
+                $pdf->Line(0,72.7,90,72.7);
+                $pdf->Line(0,72.8,90,72.8);
+                $pdf->Line(0,72.9,90,72.9);
+                $pdf->Line(0,73,90,73);
+                $pdf->Line(0,73.1,90,73.1);
+                $pdf->Line(0,73.2,90,73.2);
+                $pdf->Line(0,73.3,90,73.3);
+                $pdf->Line(0,73.4,90,73.4);
+                $pdf->Line(0,73.5,90,73.5);
+                $pdf->Line(0,73.6,90,73.6);
+                $pdf->Line(0,73.7,90,73.7);
+                //Fin de linea gruesa separadora inferior de Maxicode 
+
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(27);
+                $pdf->SetFont('Arial','B',12);
+                $pdf->Cell(0,0,''.'UPS EXPRESS',0,0,'L');
+
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(4);
+                $pdf->SetFont('Arial','',10);
+                $pdf->Cell(0,0,''.'TRACKING #: '.formatear_tracking($row['tracking']),0,0,'L');    //Tracking #
+
+                $pdf->SetLeftMargin(81);
+                $pdf->SetFont('Arial','',30);
+                $pdf->Ln(-1.7);
+                $pdf->Cell(0,0,''.'1',0,0,'L');   //Service Icon
+
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(3);
+                $pdf->SetFont('Arial','',10);
+
+                $pdf->Ln(1);
+                $pdf->SetFont('Arial','B',8);
+                //$codebar = $codigo.'-'.$row['item'].'-'.$row['codigo'];
+
+                //POSTAL CODE codigo de barras del tracking #
+
+                $codebar = $row['tracking'];
+                Barcode39 ($codebar);
+
+                //$pdf->Image('./barscode/Barcode_'.$codigo.'-'.$row['item'].'-'.$row['codigo'].'.png',20 ,78, 50 , 15);
+                $pdf->Image('./barscode/Barcode_'.$codebar.'.png',5 ,87, 80, 25);
+
+                //Linea de apertura del codigo de barras grande
+                $pdf->Line(0,85.5,90,85.5);
+                $pdf->Line(0,85.6,90,85.6);
+                $pdf->Line(0,85.7,90,85.7);
+                $pdf->Line(0,85.8,90,85.8);
+                $pdf->Line(0,85.9,90,85.9);
+                //Fin de linea de apertura del codigo de barras grande
+
+                //Linea gruesa de cierre del codigo de barras grande
+                $pdf->Line(0,112.7,90,112.7);
+                $pdf->Line(0,112.8,90,112.8);
+                $pdf->Line(0,112.9,90,112.9);
+                $pdf->Line(0,113,90,113);
+                $pdf->Line(0,113.1,90,113.1);
+                $pdf->Line(0,113.2,90,113.2);
+                $pdf->Line(0,113.3,90,113.3);
+                $pdf->Line(0,113.4,90,113.4);
+                $pdf->Line(0,113.5,90,113.5);
+                $pdf->Line(0,113.6,90,113.6);
+                $pdf->Line(0,113.7,90,113.7);
+                //Linea gruesa de cierre del codigo de barras grande
+
+                $pdf->Ln(33);
+                $pdf->SetFont('Arial','',10);
+                $pdf->Cell(0,0,''.'BILLING: F/C TPR E27A19 US',0,0,'L');
+
+                $pdf->SetLeftMargin(65);
+                $pdf->SetFont('Arial','B',16);
+                $pdf->Ln(0);
+                $pdf->Cell(0,0,''.'INV-CC',0,0,'L');
+
+                $pdf->SetFont('Arial','',10);
+                $pdf->SetLeftMargin(0);
+                $pdf->Ln(4);
+                $pdf->Cell(0,0,''.'DESC: '.$row['gen_desc'],0,0,'L');  //DescripciÃ³n del item
+
+                $pdf->Ln(4);
+                $pdf->Cell(0,0,''.'Invoice No.: '.$row['Ponumber'],0,0,'L');   //PONUMBER
+
+                $pdf->Ln(4);
+                $pdf->Cell(0,0,''.'Purchase No.: '.$row['Custnumber'].' / '.'ITEM: '.$row['cpitem'],0,0,'L');   //Custnumber
+                
+                $mensaje = $row['cpmensaje'];
+
+                $resultado = strpos($mensaje,'Blank Info');
+
+                if($resultado==false){
+
+                        $pdf->AddPage();
+                        $pdf->SetFont('Arial','B',10);
+                        $pdf->SetLeftMargin(0);
+                        $pdf->Ln(0);
+                        $pdf->Cell(0,0,$row['Ponumber'],0,0,'L');
+                        $pdf->Ln(4);
+                        $pdf->Cell(0,0,$row['Custnumber'],0,0,'L');
+                        $pdf->Ln(4);
+                        $pdf->Line(0,14,90,14);
+                        $pdf->Cell(0,0,$row['cpitem'].' - - - '. '1ZWY11906652989421',0,0,'L');
+                        $pdf->Ln(7);
+
+
+                        $mensaje = $row['cpmensaje'];
+                        $pos = strripos($mensaje, ':');  //Ultima posicion de :
+                        $pos++;
+                        $cortar = iconv_substr($mensaje,0,$pos); //Cortar hasta ultima posicion de : para obtener el To y el From
+                        //To
+                        $posTo = strpos($cortar, ':',0);  //Obtener primera posicion de : (hasta ahi llega el To)
+                        $cortarTo = iconv_substr($mensaje,0,$posTo);
+                        $cortarTo = str_replace('To-','',$cortarTo);
+                        //Mensaje
+                        $mensaje = str_replace($cortar,'',$mensaje);
+                        $mensaje = str_replace('\\','',$mensaje);
+                        //From
+                        $cortarFrom = str_replace('To-'.$cortarTo.'::From-','',$cortar);
+                        $cortarFrom = str_replace(':','',$cortarFrom);
+
+
+                        $pdf->Cell(0,0,'To - '.$cortarTo,0,0,'L');
+                        $pdf->Ln(7);
+                        $pdf->Cell(0,0,'From - '.$cortarFrom,0,0,'L');
+                        $pdf->Ln(10);
+                        $pdf->SetFont('Arial','B',12);
+
+
+                        //$pdf->WordWrap($mensaje,80);
+                        $pdf->Write(5,$mensaje);
+                }
+                
+                } // Fin del while
+
+               
+if(isset($_GET['guia']))
+{
+    $pdf->Output("./Documentos/Etiquetas-".$_GET["guia"].".pdf","F");
+    $pdf = new ConcatPdf();
+    $guia=$_GET['guia'];
+    $pdf->setFiles(array("./Documentos/ManifestUPS-".$guia.".pdf", "./Documentos/MasterInvoice-".$guia.".pdf","./Documentos/Etiquetas-".$guia.".pdf"));
+    $pdf->concat();
+    $pdf->Output('concat.pdf', 'I');
+
+}
+else
+{
+    $pdf->Output("./Documentos/Etiquetas-".$_GET["guia"].".pdf","I");
+}
+  ?>
